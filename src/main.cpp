@@ -86,7 +86,7 @@ int main() {
                 double car_y = j[1]["y"];
                 double car_s = j[1]["s"];
                 double car_d = j[1]["d"];
-                double car_yaw = j[1]["yaw"];
+                double car_yaw = j[1]["yaw"];   //WX: this yaw should be in degree
                 double car_speed = j[1]["speed"];
 
                 // Previous path data given to the Planner
@@ -104,7 +104,7 @@ int main() {
                 // **************** WX: start ******************************************
                 
                 // road to uodate ego_vehicle data
-                road.update_ego_vehicle(car_x, car_y, car_s, car_d, car_yaw, car_speed, previous_path_x, previous_path_y);
+                road.update_ego_vehicle(car_x, car_y, car_s, car_d, car_yaw, car_speed, previous_path_x, previous_path_y, end_path_s, end_path_d);
                 
                 // road to take sensor data
                 road.update_vehicles(sensor_fusion);

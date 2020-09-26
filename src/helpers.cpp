@@ -1,10 +1,61 @@
 #include <math.h>
 #include <string>
 #include <vector>
+#include "Eigen-3.3/Eigen/Dense"
 
 // for convenience
 using std::string;
 using std::vector;
+
+using Eigen::MatrixXd;
+
+
+// ********** WX newly defined function: Start ********************
+
+int d2LaneNumber(double d){
+    
+    int LaneNumber = -1;
+    
+    // update lane info
+    if (d > 0.0 && d <= 4.0)
+        LaneNumber = 3;
+    else if (d > 4.0 && d <= 8.0)
+        LaneNumber = 2;
+    else if (d > 8.0 && d <= 12.0)
+        LaneNumber = 1;
+    else
+        LaneNumber = -1;
+    
+    return LaneNumber;
+}
+
+vector<double> JMT(vector<double> &start, vector<double> &end, double T) {
+  
+   
+    MatrixXd A = MatrixXd(3, 3);
+     A << T*T*T, T*T*T*T, T*T*T*T*T,
+          3*T*T, 4*T*T*T,5*T*T*T*T,
+          6*T, 12*T*T, 20*T*T*T;
+       
+     MatrixXd B = MatrixXd(3,1);
+     B << end[0]-(start[0]+start[1]*T+.5*start[2]*T*T),
+          end[1]-(start[1]+start[2]*T),
+          end[2]-start[2];
+             
+     MatrixXd Ai = A.inverse();
+     
+     MatrixXd C = Ai*B;
+     
+     vector <double> result = {start[0], start[1], .5*start[2]};
+
+     for(int i = 0; i < C.size(); ++i) {
+       result.push_back(C.data()[i]);
+     }
+
+     return result;
+}
+
+// ********** WX newly defined function: End **********************
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,

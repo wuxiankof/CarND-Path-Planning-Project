@@ -9,6 +9,17 @@
 using std::string;
 using std::vector;
 
+
+
+// ********** WX newly defined function: Start ********************
+
+extern int d2LaneNumber(double d);
+
+extern vector<double> JMT(vector<double> &start, vector<double> &end, double T);
+
+// ********** WX newly defined function: End ********************
+
+
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
 //   else the empty string "" will be returned.

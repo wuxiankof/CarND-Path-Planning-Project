@@ -18,7 +18,7 @@ class Vehicle {
 
     Vehicle(int lane, float s, float v, float a, string state="CS");
     
-    // ********** WX newly defined method: Start ********************
+    // ********** WX newly defined method: Start ******************************************
     
     // car info: unique ID, x, y, x_dot, y_dot, s, d
     Vehicle(vector<double> car_info);
@@ -26,7 +26,10 @@ class Vehicle {
     // update vehicle info
     void Update_Vehicle_Info(vector<double> car_info);
     
-    // ********** WX newly defined method: End ********************
+    // generate predictions for other vehicles
+    vector<Vehicle> generate_predictions2(int timesteps=50);
+    
+    // ********** WX newly defined method: End ********************************************
     
     vector<Vehicle> choose_next_state(map<int, vector<Vehicle>> &predictions);
 
@@ -76,12 +79,16 @@ class Vehicle {
 
     int lane, s, goal_lane, goal_s, lanes_available;
 
-    float v, target_speed, a, max_acceleration;
+    float v, a;
+    
+    float target_speed = 50 * 0.4; //0.44704; //WX MPH to m/s 1.6*1000/3600
+    float max_acceleration = 10; //WX: as required: total acceleration not over 10 m/s^2
 
     string state;
     
     //WX new defined properties
     int ID;
+    
     double x;
     double y;
     double x_dot;
@@ -89,10 +96,20 @@ class Vehicle {
     double s2;
     double d2;
     
-    double yaw;
+    double yaw; //WX: for other vehicles, in radian; for ego, should be in degree.
     
     vector<double> previous_path_x;
     vector<double> previous_path_y;
+    
+    double end_path_s;
+    double end_path_d;
+    
+    vector<double> * p_mapPts_x;
+    vector<double> * p_mapPts_y;
+    vector<double> * p_mapPts_s;
+    
+    double time_per_timestep = 0.02;   // 0.02 seconds per timestep
+    double v_prev;
     
 };
 

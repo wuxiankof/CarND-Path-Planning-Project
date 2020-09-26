@@ -12,22 +12,74 @@ using std::map;
 using std::string;
 using std::vector;
 
-// ********** WX newly defined method: Start ************************************************************
-void Road::update_ego_vehicle(double x, double y, double s, double d, double yaw, double speed, vector<double> previous_path_x, vector<double> previous_path_y){
+// Initializes Road
+Road::Road(int speed_limit, double traffic_density, vector<int> &lane_speeds) {
+  
+    this->num_lanes = (int) lane_speeds.size();
+    this->lane_speeds = lane_speeds;
+    this->speed_limit = speed_limit;
+    this->density = traffic_density;
+    this->camera_center = this->update_width/2;
+}
+
+
+// ********** WX newly defined method: Start *****************************************
+
+// overloaded constructor
+Road::Road(vector<double> &map_waypoints_x, vector<double> &map_waypoints_y, vector<double> &map_waypoints_s, vector<double> map_waypoints_dx, vector<double> map_waypoints_dy){
+  
+    mapPts_x = map_waypoints_x;
+    mapPts_y = map_waypoints_y;
+    mapPts_s = map_waypoints_s;
+    mapPts_dx = map_waypoints_dx;
+    mapPts_dy = map_waypoints_dy;
+    
+    // car info: unique ID, x, y, x_dot, y_dot, s, d
+    // waymap pt 0: 784.6001 1135.571 0 -0.02359831 -0.9997216
+    double d = 6;
+    double x = mapPts_x[0] + d * mapPts_dx[0];
+    double y = mapPts_y[0] + d * mapPts_dy[0];
+    double s = mapPts_s[0];
+    
+    // init ego_Vehicle
+    vector<double> ego_info = {-1, x, y, 0, 0, s, d};
+    this->ego_Vehicle = Vehicle(ego_info);
+    
+    this->ego_Vehicle.a = 0;
+    
+    this->ego_Vehicle.p_mapPts_x = & mapPts_x;
+    this->ego_Vehicle.p_mapPts_y = & mapPts_y;
+    this->ego_Vehicle.p_mapPts_s = & mapPts_s;
+}
+
+void Road::update_ego_vehicle(double x, double y, double s, double d, double yaw, double speed, vector<double> previous_path_x, vector<double> previous_path_y, double end_path_s, double end_path_d){
+    
+    double speed2 = speed * 0.44704; //WX MPH to m/s 1.6*1000/3600
     
     this->ego_Vehicle.x = x;
     this->ego_Vehicle.y = y;
     this->ego_Vehicle.s2 = s;
     this->ego_Vehicle.d2 = d;
     
-    this->ego_Vehicle.v = speed;
+    this->ego_Vehicle.s = s;
     this->ego_Vehicle.yaw = yaw;
     
-    this->ego_Vehicle.x_dot = speed * cos(deg2rad(yaw));
-    this->ego_Vehicle.y_dot = speed * sin(deg2rad(yaw));
+    this->ego_Vehicle.v = speed2;
+    this->ego_Vehicle.a =  (speed2 - this->ego_Vehicle.v_prev) / this->ego_Vehicle.time_per_timestep;
+    this->ego_Vehicle.v_prev = speed2;
+    
+    this->ego_Vehicle.x_dot = speed2 * cos(deg2rad(yaw));
+    this->ego_Vehicle.y_dot = speed2 * sin(deg2rad(yaw));
     
     this->ego_Vehicle.previous_path_x = previous_path_x;
     this->ego_Vehicle.previous_path_y = previous_path_y;
+    
+    this->ego_Vehicle.end_path_s = end_path_s;
+    this->ego_Vehicle.end_path_d = end_path_d;
+    
+    this->ego_Vehicle.lane = d2LaneNumber(d);
+    
+    this->ego_Vehicle.goal_s = s + this->ego_Vehicle.preferred_buffer + 2 * speed2; // WX: add vhe lengh and 2 sec buffer
 }
 
 void Road::update_vehicles(vector <vector<double>> sensor_fusion_data){
@@ -62,7 +114,8 @@ void Road::print_all_vehicles(){
         std::cout << vehicle.x_dot  << ", ";
         std::cout << vehicle.y_dot << ", ";
         std::cout << vehicle.s2 << ", ";
-        std::cout << vehicle.d2 << std::endl;;
+        std::cout << vehicle.d2 << ", ";
+        std::cout <<"Lane="<< vehicle.lane <<std::endl;
         ++it;
     }
 
@@ -78,7 +131,7 @@ void Road::get_ego_trajectory(vector<double> &next_x_vals, vector<double> &next_
     while (it != this->vehicles.end()) {
         
         int v_id = it->first;
-        vector<Vehicle> preds = it->second.generate_predictions(1); //WX to generate only for next sec
+        vector<Vehicle> preds = it->second.generate_predictions2(); //WX: default: 50 timesteps
         predictions[v_id] = preds;
         ++it;
     }
@@ -96,7 +149,7 @@ void Road::get_ego_trajectory(vector<double> &next_x_vals, vector<double> &next_
 }
 
 
-// ********** WX newly defined method: End ************************************************************
+// ********** WX newly defined method: End *****************************************
 
 Vehicle Road::get_ego() {
   return this->vehicles.find(this->ego_key)->second;

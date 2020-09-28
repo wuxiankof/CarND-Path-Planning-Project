@@ -56,11 +56,12 @@ int main() {
         map_waypoints_dy.push_back(d_y);
     }
 
-    // **************** WX: start ****************
+    // **************** WX: start **************************************
+    
     Road road = Road(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
     road.iTimeStepCounter = 0;
     
-    // **************** WX: end ******************
+    // **************** WX: end ****************************************
     
     // WX: old parameters: [&map_waypoints_x, &map_waypoints_y, &map_waypoints_s, &map_waypoints_dx, &map_waypoints_dy]
     // WX: updated parameters
@@ -112,33 +113,15 @@ int main() {
                 // Print sensor_fusion data
                 road.iTimeStepCounter++;
                 if (road.iTimeStepCounter % 50 == 0){
-                    
                     road.print_all_vehicles();
-                }
-                
+
+                // update AV's trajectory
                 vector<double> next_x_vals;
                 vector<double> next_y_vals;
-                
-                // update AV's trajectory
                 road.get_ego_trajectory(next_x_vals, next_y_vals);
                 
                 // **************** WX: end **************************************************
-                
-
-                /**
-                   * TODO: define a path made up of (x,y) points that the car will visit
-                   *   sequentially every .02 seconds
-                */
-                
-                /*
-                double dist_inc = 0.5;
-                for (int i = 0; i < 50; ++i) {
-
-                    next_x_vals.push_back(car_x+(dist_inc*i)*cos(deg2rad(car_yaw)));
-                    next_y_vals.push_back(car_y+(dist_inc*i)*sin(deg2rad(car_yaw)));
-
-                }
-                 */
+  
                 
                 json msgJson;
                 

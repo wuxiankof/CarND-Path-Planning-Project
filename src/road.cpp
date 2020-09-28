@@ -26,7 +26,11 @@ Road::Road(int speed_limit, double traffic_density, vector<int> &lane_speeds) {
 // ********** WX newly defined method: Start *****************************************
 
 // overloaded constructor
-Road::Road(vector<double> &map_waypoints_x, vector<double> &map_waypoints_y, vector<double> &map_waypoints_s, vector<double> map_waypoints_dx, vector<double> map_waypoints_dy){
+Road::Road(vector<double> &map_waypoints_x,
+           vector<double> &map_waypoints_y,
+           vector<double> &map_waypoints_s,
+           vector<double> map_waypoints_dx,
+           vector<double> map_waypoints_dy){
   
     mapPts_x = map_waypoints_x;
     mapPts_y = map_waypoints_y;
@@ -36,7 +40,7 @@ Road::Road(vector<double> &map_waypoints_x, vector<double> &map_waypoints_y, vec
     
     // car info: unique ID, x, y, x_dot, y_dot, s, d
     // waymap pt 0: 784.6001 1135.571 0 -0.02359831 -0.9997216
-    double d = 6;
+    double d = 6; // lane 2
     double x = mapPts_x[0] + d * mapPts_dx[0];
     double y = mapPts_y[0] + d * mapPts_dy[0];
     double s = mapPts_s[0];
@@ -44,8 +48,10 @@ Road::Road(vector<double> &map_waypoints_x, vector<double> &map_waypoints_y, vec
     // init ego_Vehicle
     vector<double> ego_info = {-1, x, y, 0, 0, s, d};
     this->ego_Vehicle = Vehicle(ego_info);
-    
+    this->ego_Vehicle.v = 0;
+    this->ego_Vehicle.v_prev = 0;
     this->ego_Vehicle.a = 0;
+    this->ego_Vehicle.target_speed = 0;
     
     this->ego_Vehicle.p_mapPts_x = & mapPts_x;
     this->ego_Vehicle.p_mapPts_y = & mapPts_y;
@@ -58,10 +64,8 @@ void Road::update_ego_vehicle(double x, double y, double s, double d, double yaw
     
     this->ego_Vehicle.x = x;
     this->ego_Vehicle.y = y;
-    this->ego_Vehicle.s2 = s;
-    this->ego_Vehicle.d2 = d;
-    
     this->ego_Vehicle.s = s;
+    this->ego_Vehicle.d = d;
     this->ego_Vehicle.yaw = yaw;
     
     this->ego_Vehicle.v = speed2;
@@ -113,8 +117,8 @@ void Road::print_all_vehicles(){
         std::cout << vehicle.y << ", ";
         std::cout << vehicle.x_dot  << ", ";
         std::cout << vehicle.y_dot << ", ";
-        std::cout << vehicle.s2 << ", ";
-        std::cout << vehicle.d2 << ", ";
+        std::cout << vehicle.s << ", ";
+        std::cout << vehicle.d << ", ";
         std::cout <<"Lane="<< vehicle.lane <<std::endl;
         ++it;
     }

@@ -7,6 +7,7 @@
 #include <vector>
 #include "cost.h"
 #include "helpers.h"
+#include "spline.h"
 
 using std::string;
 using std::vector;
@@ -31,13 +32,17 @@ Vehicle::Vehicle(vector<double> car_info){
     this->y = car_info[2];
     this->x_dot = car_info[3];
     this->y_dot = car_info[4];
-    this->s2 = car_info[5];
-    this->d2 = car_info[6];
+    this->s = car_info[5];
+    this->d = car_info[6];
     
-    this->lane = d2LaneNumber(this->d2);
-    this->s = this->s2;
+    this->lane = d2LaneNumber(this->d);
+    this->a = 0;
     
-    // this->max_acceleration = -1; // WX: already difnied in .h file
+    if (this->x_dot != 0 || this->y_dot!=0){
+        this->yaw = atan2(this->y_dot, this->x_dot);  //WX: here for other vehicles, in radian; for ego, should be in degree.
+        this->v = this->x_dot/cos(this->yaw); //WX: to refer to the sketch
+        this->v_prev = this->v;
+    }
 }
 
 
@@ -47,22 +52,23 @@ void Vehicle::Update_Vehicle_Info(vector<double> car_info){
     this->y = car_info[2];
     this->x_dot = car_info[3];
     this->y_dot = car_info[4];
-    this->s2 = car_info[5];
-    this->d2 = car_info[6];
+    this->s = car_info[5];
+    this->d = car_info[6];
     
-    this->lane = d2LaneNumber(this->d2);
-    this->yaw = atan2(this->y_dot, this->x_dot);  //WX: here for other vehicles, in radian; for ego, should be in degree.
-    this->s = this->s2;
-    this->v = this->x_dot/cos(this->yaw); //WX: to refer to the sketch
+    this->lane = d2LaneNumber(this->d);
     
-    this->a = (this->v - this->v_prev) / this-> time_per_timestep;
+    if (this->x_dot != 0 || this->y_dot!=0){
+        this->yaw = atan2(this->y_dot, this->x_dot);  //WX: here for other vehicles, in radian; for ego, should be in degree.
+        this->v = this->x_dot/cos(this->yaw); //WX: to refer to the sketch
+        this->a = (this->v - this->v_prev) / this-> time_per_timestep;
     
-    if (this->a > this->max_acceleration)
-        this->a = this->max_acceleration;
-    else if (this->a < -1 * this->max_acceleration)
-        this->a = -1 * this->max_acceleration;
+        if (this->a > this->max_acceleration)
+            this->a = this->max_acceleration;
+        else if (this->a < -1 * this->max_acceleration)
+            this->a = -1 * this->max_acceleration;
     
-    this->v_prev = this->v;
+        this->v_prev = this->v;
+    }
 }
 
 vector<Vehicle> Vehicle::generate_predictions2(int timesteps){
@@ -90,13 +96,13 @@ vector<Vehicle> Vehicle::generate_predictions2(int timesteps){
     return predictions;
 }
 
-vector<float> Vehicle::get_kinematics(map<int, vector<Vehicle>> &predictions, int lane) {
+vector<float> Vehicle::get_kinematics(map<int, vector<Vehicle>> &predictions, int lane, double T) {
   
     // Gets next timestep kinematics (position, velocity, acceleration)
     //   for a given lane. Tries to choose the maximum velocity and acceleration,
     //   given other vehicle positions and accel/velocity constraints.
     
-    float max_velocity_accel_limit = this->max_acceleration + this->v; //WX: curr v + 1 * a
+    float max_velocity_accel_limit = this->v + this->max_acceleration * 0.9 * T; //WX: curr v + a * T
     float new_position;
     float new_velocity;
     float new_accel;
@@ -107,15 +113,17 @@ vector<float> Vehicle::get_kinematics(map<int, vector<Vehicle>> &predictions, in
         
         if (get_vehicle_behind(predictions, lane, vehicle_behind)) {
           
-          // must travel at the speed of traffic, regardless of preferred buffer
-          new_velocity = vehicle_ahead.v;
+            // must travel at the speed of traffic, regardless of preferred buffer
+            new_velocity = vehicle_ahead.v;
         }
         else {
             
-          float max_velocity_in_front = (vehicle_ahead.s - this->s
+            float max_velocity_in_front = (vehicle_ahead.s - this->s
                                       - this->preferred_buffer) + vehicle_ahead.v
                                       - 0.5 * (this->a);
-          new_velocity = std::min(std::min(max_velocity_in_front,
+            max_velocity_in_front *= T; // WX: to reflect the acture horizon
+            
+            new_velocity = std::min(std::min(max_velocity_in_front,
                                            max_velocity_accel_limit),
                                            this->target_speed);
         }
@@ -125,7 +133,11 @@ vector<float> Vehicle::get_kinematics(map<int, vector<Vehicle>> &predictions, in
         new_velocity = std::min(max_velocity_accel_limit, this->target_speed);
     }
 
-    new_accel = new_velocity - this->v; // Equation: (v_1 - v_0)/t = acceleration
+    
+    //** test: let new_velocity just = this->target_speed
+    new_velocity = std::min(max_velocity_accel_limit, this->target_speed);
+    
+    new_accel = (new_velocity - this->v) / T; // Equation: (v_1 - v_0)/t = acceleration
     
     // WX added
     if (new_accel > this->max_acceleration)
@@ -133,89 +145,202 @@ vector<float> Vehicle::get_kinematics(map<int, vector<Vehicle>> &predictions, in
     else if (new_accel < -1 * this->max_acceleration)
         new_accel = -1 * this->max_acceleration;
     
-    new_position = this->s + new_velocity + new_accel / 2.0;
+    new_position = this->s + new_velocity*T + new_accel*T*T / 2.0;
+    //float pos = this->s + this->v*t + this->a*t*t/2.0;
 
     return{new_position, new_velocity, new_accel};
 }
 
 vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> &predictions) {
   
-    //  WX code
+    // provided code for smooth the path
+    int prev_size = (int)this->previous_path_x.size();
+    double car_s = this->s;
     
-    if (this->a > this->max_acceleration)
-        this->a = this->max_acceleration;
-    else if (this->a < -1 * this->max_acceleration)
-        this->a = -1 * this->max_acceleration;
+    if (prev_size > 0){
+        
+        car_s = this->end_path_s;
+    }
+    
+    bool too_close = false;
+        
+    // check other cars -> can be shifted to kinematic()
+    map<int, vector<Vehicle>>::iterator it;
+    for (it = predictions.begin(); it != predictions.end(); ++it){
+        
+        Vehicle temp_vehicle = it->second[0];  //WX: current TimeStep, see function below
+        
+        // car is in my lane
+        if (temp_vehicle.lane == this->lane){
+            
+            double vx = temp_vehicle.x_dot;
+            double vy = temp_vehicle.y_dot;
+            double check_speed = sqrt(vx*vx + vy*vy);
+            double check_car_s = temp_vehicle.s;
+            
+            // if using previous points can project s value out
+            // WX: this is for the other car !!! assume the same horizon as the ego
+            check_car_s += prev_size * this->time_per_timestep * check_speed;
+            
+            // check s values greater than mine and s gap
+            if( (check_car_s > car_s) && (check_car_s - car_s < 30) ){
+                
+                // do the same logic here, lower reference velocity so we don't crah into the car infront of us, could also flag to try to change lane
+                //ref_v = 29.5 * 0.44704;
+                too_close = true;
+            }
+        }
+    }
+    
+    if(too_close){
+        
+        //lane changing, my code is a bit bumper, why? 54:00
+        if (this->lane > 0 && this -> lane < 2){
+            
+            this->lane --;
+            this->d -= 4;
+            
+            std::cout << "LC test"<<std::endl;
+        }
+        
+        this->target_speed -= .224;
+    }
+    else if(this->target_speed < this->speed_limit){
+        
+        this->target_speed += .224;
+    }
+    
+    // smooth the path
+    
+    vector<double> ptsx;
+    vector<double> ptsy;
+    
+    double ref_x = this->x;
+    double ref_y = this->y;
+    double ref_yaw = deg2rad(this->yaw);
+    
+    // if previous size is almost empty, use th car as starting reference
+    if (prev_size < 2){
+        
+        // use two points that make the path tangent to the car
+        double prev_car_x = ref_x - cos(ref_yaw);
+        double prev_car_y = ref_y - sin(ref_yaw);
+        
+        ptsx.push_back(prev_car_x);
+        ptsx.push_back(ref_x);
+        
+        ptsy.push_back(prev_car_y);
+        ptsy.push_back(ref_y);
+    }
+    else{
+        
+        // use the previous path's end point as starting reference
+        ref_x = this->previous_path_x[prev_size-1];
+        ref_y = this->previous_path_y[prev_size-1];
+        
+        double ref_x_prev = this->previous_path_x[prev_size-2];
+        double ref_y_prev = this->previous_path_y[prev_size-2];
+        ref_yaw = atan2(ref_y - ref_y_prev, ref_x - ref_x_prev);
+        
+        // use two points that make the path tangent to the previous path's end point
+        ptsx.push_back(ref_x_prev);
+        ptsx.push_back(ref_x);
+        
+        ptsy.push_back(ref_y_prev);
+        ptsy.push_back(ref_y);
+    }
+    
+    // In frenet add evenly 30m spaced points ahead of the starting reference
+    vector<double> next_wp0 = getXY(car_s+30, this->d, *p_mapPts_s, *p_mapPts_x, *p_mapPts_y);
+    vector<double> next_wp1 = getXY(car_s+60, this->d, *p_mapPts_s, *p_mapPts_x, *p_mapPts_y);
+    vector<double> next_wp2 = getXY(car_s+90, this->d, *p_mapPts_s, *p_mapPts_x, *p_mapPts_y);
+    
+    ptsx.push_back(next_wp0[0]);
+    ptsx.push_back(next_wp1[0]);
+    ptsx.push_back(next_wp2[0]);
+    
+    ptsy.push_back(next_wp0[1]);
+    ptsy.push_back(next_wp1[1]);
+    ptsy.push_back(next_wp2[1]);
+    
+    for(int i=0; i<ptsx.size(); i++){
+        
+        double shift_x = ptsx[i] - ref_x;
+        double shift_y = ptsy[i] - ref_y;
+        
+        //shift car reference angle to 0 degrees: to check math later
+        ptsx[i] = shift_x * cos(0-ref_yaw) - shift_y * sin(0-ref_yaw);
+        ptsy[i] = shift_x * sin(0-ref_yaw) + shift_y * cos(0-ref_yaw);
+    }
+    
+    // create a spline
+    tk::spline s;
+    
+    // set (x,y) points to the spline
+    s.set_points(ptsx, ptsy);
+    
+    // define the actual (x, y) points we will use for the planner
+    vector<Vehicle> traj;
+    for (int i=0; i< prev_size; i++){
+        
+        vector<double> car_info = {0, previous_path_x[i], previous_path_y[i], 0, 0, 0, 0};
+        traj.push_back(Vehicle(car_info));
+    }
+    
+    // calculate hwo to break up spline points so that we travel at our desired reference v
+    double target_x = 30.0;
+    double target_y = s(target_x);
+    double target_dist = sqrt(target_x*target_x + target_y*target_y);
+    double N = (target_dist/(this->time_per_timestep * this->target_speed));
+    
+    double x_add_on = 0;
+    
+    for (int i=0; i<50-prev_size; i++){
+        
+        double x_point = x_add_on + target_x/N;
+        double y_point = s(x_point);
+        
+        x_add_on = x_point;
+        
+        double x_ref = x_point;
+        double y_ref = y_point;
+        
+        x_point = x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw);
+        y_point = x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw);
+        
+        x_point += ref_x;
+        y_point += ref_y;
+        
+        vector<double> car_info = {0, x_point, y_point, 0, 0, 0, 0};
+        traj.push_back(Vehicle(car_info));
+    }
+
+    return traj;
+}
+
+vector<Vehicle> Vehicle::get_trajectory_from_JMT(vector<double> jmt, double T, bool bPrint){
     
     vector<Vehicle> traj;
     
-    double s_start, s_dot_start, s_dot2_start;
-    double s_goal, s_dot_goal, s_dot2_goal;
-    // double d_start, d_dot_start, d_dot2_start;
-    // double d_goal, d_dot_goal, d_dot2_goal;
-
-    int path_size = (int)this->previous_path_x.size();
-    
-    // 1. get s_start, etc.
-    if (path_size < 2) {
-        
-        s_start = this->s2;
-        s_dot_start = this->v;
-        s_dot2_start = this->a;
-        
-    } else {
-        
-        //debug
-        std::cout << "previous path size >=2 " << std::endl;
-        
-        double angle = atan2(previous_path_y[1]-previous_path_y[0], previous_path_x[1]-previous_path_x[0]);
-        vector<double> fr0 = getFrenet(previous_path_x[0], previous_path_y[0], angle, *this->p_mapPts_x, *this->p_mapPts_y);
-        vector<double> fr1 = getFrenet(previous_path_x[1], previous_path_y[1], angle, *this->p_mapPts_x, *this->p_mapPts_y);
-        
-        s_start = fr0[0];
-        s_dot_start = this->v; //(fr1[0] - fr0[0]) / this->time_per_timestep;
-        s_dot2_start = this->a;
-        
-        //d_start = fr[1];
-    }
-  
-    // testing
-    s_start = this->s2;
-    s_dot_start = this->v;
-    s_dot2_start = this->a;
-
-    
-    // 2. get s_goal, d_goal
-    vector<float> kinematics = get_kinematics(predictions, this->lane);
-    s_goal = kinematics[0];  //end of next 1 sec
-    s_dot_goal = kinematics[1];
-    s_dot2_goal = kinematics[2];
-    
-    // 3. solve JMT
-    vector<double> start = {s_start, s_dot_start, s_dot2_start};
-    vector<double> end = {s_goal, s_dot_goal, s_dot2_goal};
-    vector<double> jmt = JMT(start, end, 2);
-  
-    // debug
-    std::cout << "jmt input =" << s_start << "," << s_dot_start << "," << s_dot2_start << "," << s_goal << "," << s_dot_goal << "," << s_dot2_goal << std::endl;
-    
-    //4. generate pts
-    int pts_count = (int) 2 / this->time_per_timestep;
+    int pts_count = (int) T / this->time_per_timestep;
+    double t = 0;
     for (int i = 0; i < pts_count; ++i){
         
-        double t = this->time_per_timestep * (i+1);
+        t= this->time_per_timestep * i;
         double s = jmt[0] + jmt[1] * t + jmt[2] * t*t + jmt[3] * t*t*t + jmt[4] * t*t*t*t + jmt[5] * t*t*t*t*t;
         
           //debug
           std::cout << s << ", ";
       
-        vector<double> XY = getXY(s, this->d2, *this->p_mapPts_s, *this->p_mapPts_x, *this->p_mapPts_y);
+        vector<double> XY = getXY(s, this->d, *this->p_mapPts_s, *this->p_mapPts_x, *this->p_mapPts_y);
         
         vector<double> car_info = {0, XY[0], XY[1], 0, 0, 0, 0};
         traj.push_back(Vehicle(car_info));
     }
     
+    //debug
     std::cout << std::endl;
+    
     return traj;
 }
 
@@ -223,72 +348,6 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> &predict
 
 vector<Vehicle> Vehicle::choose_next_state(map<int, vector<Vehicle>> &predictions) {
   
-    
-    // car info: unique ID, x, y, x_dot, y_dot, s, d
-
-    // WX: testing code 1: strait line
-    /*
-    double dist_inc = 0.5;
-    vector<Vehicle> traj;
-    for (int i = 0; i < 50; ++i) {
-        
-        double x = this->x + (dist_inc*i) * cos(deg2rad(this->yaw));
-        double y = this->y + (dist_inc*i) * sin(deg2rad(this->yaw));
-                                              
-        vector<double> car_info = {0, x, y, 0, 0, 0, 0};
-        traj.push_back(Vehicle(car_info));
-    }
-    
-    return traj;
-    
-    // WX: testing code 2: curved line
-    double pos_x;
-    double pos_y;
-    double angle;
-    
-    vector<Vehicle> traj;
-
-    int path_size = (int)this->previous_path_x.size();
-
-    for (int i = 0; i < path_size; ++i) {
-        
-        double x = this->previous_path_x[i];
-        double y = this->previous_path_y[i];
-        vector<double> car_info = {0, x, y, 0, 0, 0, 0};
-        traj.push_back(Vehicle(car_info));
-    }
-
-    if (path_size == 0) {
-        
-        pos_x = this->x;
-        pos_y = this->y;
-        angle = deg2rad(this->yaw);
-        
-    } else {
-      
-        pos_x = this->previous_path_x[path_size-1];
-        pos_y = this->previous_path_y[path_size-1];
-
-        double pos_x2 = this->previous_path_x[path_size-2];
-        double pos_y2 = this->previous_path_y[path_size-2];
-        
-        angle = atan2(pos_y-pos_y2, pos_x-pos_x2);
-    }
-
-    double dist_inc = 0.5;
-    for (int i = 0; i < 50-path_size; ++i) {
-        
-        double x = pos_x + (dist_inc) * cos(angle+(i+1)*(pi()/100));
-        double y = pos_y + (dist_inc) * sin(angle+(i+1)*(pi()/100));
-        pos_x += (dist_inc) * cos(angle+(i+1)*(pi()/100));
-        pos_y += (dist_inc)*sin(angle+(i+1)*(pi()/100));
-        
-        vector<double> car_info = {0, x, y, 0, 0, 0, 0};
-        traj.push_back(Vehicle(car_info));
-    }
-
-    return traj;
-     */
     
     //WX test: only do "KL"
     vector<Vehicle> traj = generate_trajectory("KL", predictions);

@@ -18,11 +18,11 @@ int d2LaneNumber(double d){
     
     // update lane info
     if (d > 0.0 && d <= 4.0)
-        LaneNumber = 3;
+        LaneNumber = 0;
     else if (d > 4.0 && d <= 8.0)
-        LaneNumber = 2;
-    else if (d > 8.0 && d <= 12.0)
         LaneNumber = 1;
+    else if (d > 8.0 && d <= 12.0)
+        LaneNumber = 2;
     else
         LaneNumber = -1;
     

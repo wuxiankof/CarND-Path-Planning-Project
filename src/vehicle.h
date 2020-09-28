@@ -20,6 +20,7 @@ class Vehicle {
     
     // ********** WX newly defined method: Start ******************************************
     
+    
     // car info: unique ID, x, y, x_dot, y_dot, s, d
     Vehicle(vector<double> car_info);
     
@@ -29,6 +30,12 @@ class Vehicle {
     // generate predictions for other vehicles
     vector<Vehicle> generate_predictions2(int timesteps=50);
     
+    vector<float> get_kinematics(map<int, vector<Vehicle>> &predictions, int lane, double T=1);
+    
+    vector<Vehicle> keep_lane_trajectory(map<int, vector<Vehicle>> &predictions);
+    
+    vector<Vehicle> get_trajectory_from_JMT(vector<double> jmt, double T, bool bPrint=true);
+    
     // ********** WX newly defined method: End ********************************************
     
     vector<Vehicle> choose_next_state(map<int, vector<Vehicle>> &predictions);
@@ -37,11 +44,8 @@ class Vehicle {
 
     vector<Vehicle> generate_trajectory(string state, map<int, vector<Vehicle>> &predictions);
 
-    vector<float> get_kinematics(map<int, vector<Vehicle>> &predictions, int lane);
-
     vector<Vehicle> constant_speed_trajectory();
 
-    vector<Vehicle> keep_lane_trajectory(map<int, vector<Vehicle>> &predictions);
 
     vector<Vehicle> lane_change_trajectory(string state, map<int, vector<Vehicle>> &predictions);
 
@@ -81,8 +85,10 @@ class Vehicle {
 
     float v, a;
     
-    float target_speed = 50 * 0.4; //0.44704; //WX MPH to m/s 1.6*1000/3600
+    float speed_limit = 49.5 * 0.44704; //WX MPH to m/s 1.6*1000/3600 or 1/2.24
     float max_acceleration = 10; //WX: as required: total acceleration not over 10 m/s^2
+    
+    float target_speed;
 
     string state;
     
@@ -93,8 +99,8 @@ class Vehicle {
     double y;
     double x_dot;
     double y_dot;
-    double s2;
-    double d2;
+    //double s2;
+    double d;
     
     double yaw; //WX: for other vehicles, in radian; for ego, should be in degree.
     

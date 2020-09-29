@@ -151,6 +151,48 @@ vector<float> Vehicle::get_kinematics(map<int, vector<Vehicle>> &predictions, in
     return{new_position, new_velocity, new_accel};
 }
 
+bool Vehicle::check_ahead(int lane, map<int, vector<Vehicle>> &predictions, Vehicle &rVehicle){
+  
+    // Returns a true if a vehicle is found in front of the current vehicle, false
+    //   otherwise. The passed reference rVehicle is updated if a vehicle is found.
+    
+    bool too_close = false;
+    
+    int prev_size = (int) rVehicle.previous_path_x.size();
+    
+    double car_s = this->s;
+    if (prev_size > 0)
+        car_s = this->end_path_s;
+    
+    map<int, vector<Vehicle>>::iterator it;
+    for (it = predictions.begin(); it != predictions.end(); ++it){
+        
+        Vehicle temp_vehicle = it->second[0];  //WX: current TimeStep, see function below
+        
+        // car is in my lane
+        if (temp_vehicle.lane == lane){
+            
+            double vx = temp_vehicle.x_dot;
+            double vy = temp_vehicle.y_dot;
+            double check_speed = sqrt(vx*vx + vy*vy);
+            double check_car_s = temp_vehicle.s;
+            
+            // if using previous points can project s value out
+            // WX: this is for the other car !!! assume the same horizon as the ego
+            check_car_s += prev_size * rVehicle.time_per_timestep * check_speed;
+            
+            // check s values greater than mine and s gap
+            if( (check_car_s > car_s) && (check_car_s - car_s < 30) ){
+
+                too_close = true;
+                break;
+            }
+        }
+    }
+    
+    return too_close;
+}
+
 vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> &predictions) {
   
     // provided code for smooth the path
@@ -162,47 +204,26 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> &predict
         car_s = this->end_path_s;
     }
     
-    bool too_close = false;
-        
-    // check other cars -> can be shifted to kinematic()
-    map<int, vector<Vehicle>>::iterator it;
-    for (it = predictions.begin(); it != predictions.end(); ++it){
-        
-        Vehicle temp_vehicle = it->second[0];  //WX: current TimeStep, see function below
-        
-        // car is in my lane
-        if (temp_vehicle.lane == this->lane){
-            
-            double vx = temp_vehicle.x_dot;
-            double vy = temp_vehicle.y_dot;
-            double check_speed = sqrt(vx*vx + vy*vy);
-            double check_car_s = temp_vehicle.s;
-            
-            // if using previous points can project s value out
-            // WX: this is for the other car !!! assume the same horizon as the ego
-            check_car_s += prev_size * this->time_per_timestep * check_speed;
-            
-            // check s values greater than mine and s gap
-            if( (check_car_s > car_s) && (check_car_s - car_s < 30) ){
-                
-                // do the same logic here, lower reference velocity so we don't crah into the car infront of us, could also flag to try to change lane
-                //ref_v = 29.5 * 0.44704;
-                too_close = true;
-            }
-        }
-    }
+    bool too_close = this->check_ahead(this->lane, predictions, *this);
     
     if(too_close){
         
         //lane changing, my code is a bit bumper, why? 54:00
-        if (this->lane > 0 && this -> lane < 2){
-            
-            this->lane --;
-            this->d -= 4;
-            
-            std::cout << "LC test"<<std::endl;
-        }
+        bool too_close_left = true;
+        bool too_close_right = true;
+        if (this->lane > 0)
+            too_close_left = this->check_ahead(this->lane-1, predictions, *this);
+        if (this->lane <2)
+            too_close_right = this->check_ahead(this->lane+1, predictions, *this);
         
+        if (!too_close_left)
+            this->lane --;
+        else{
+            if(!too_close_right)
+                this->lane ++;
+        }
+        this->d = 4 * this->lane + 2;
+          
         this->target_speed -= .224;
     }
     else if(this->target_speed < this->speed_limit){

@@ -151,12 +151,13 @@ vector<float> Vehicle::get_kinematics(map<int, vector<Vehicle>> &predictions, in
     return{new_position, new_velocity, new_accel};
 }
 
-bool Vehicle::check_ahead(int lane, map<int, vector<Vehicle>> &predictions, Vehicle &rVehicle){
+vector<bool> Vehicle::check_others(int lane, map<int, vector<Vehicle>> &predictions, Vehicle &rVehicle){
   
     // Returns a true if a vehicle is found in front of the current vehicle, false
     //   otherwise. The passed reference rVehicle is updated if a vehicle is found.
     
-    bool too_close = false;
+    bool too_close_front = false;
+    bool too_close_back = false;
     
     int prev_size = (int) rVehicle.previous_path_x.size();
     
@@ -181,16 +182,25 @@ bool Vehicle::check_ahead(int lane, map<int, vector<Vehicle>> &predictions, Vehi
             // WX: this is for the other car !!! assume the same horizon as the ego
             check_car_s += prev_size * rVehicle.time_per_timestep * check_speed;
             
+            if (too_close_front && too_close_back) {
+                
+                return {too_close_front, too_close_back};
+            }
+            
             // check s values greater than mine and s gap
-            if( (check_car_s > car_s) && (check_car_s - car_s < 30) ){
-
-                too_close = true;
-                break;
+            if((check_car_s > car_s) && (check_car_s - car_s < 30)){
+            
+                too_close_front = true;
+            }
+            
+            if((check_car_s < car_s) && (check_car_s - car_s < 30)){
+            
+                too_close_back = true;
             }
         }
     }
     
-    return too_close;
+    return {too_close_front, too_close_back};
 }
 
 vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> &predictions) {
@@ -204,26 +214,25 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> &predict
         car_s = this->end_path_s;
     }
     
-    bool too_close = this->check_ahead(this->lane, predictions, *this);
+    vector<bool> too_close = this->check_others(this->lane, predictions, *this);
     
-    if(too_close){
+    if(too_close[0]){ // front car too close
         
-        //lane changing, my code is a bit bumper, why? 54:00
-        bool too_close_left = true;
-        bool too_close_right = true;
+        vector<bool> too_close_left = {true, true};
+        vector<bool> too_close_right = {true, true};
         if (this->lane > 0)
-            too_close_left = this->check_ahead(this->lane-1, predictions, *this);
+            too_close_left = this->check_others(this->lane-1, predictions, *this);
         if (this->lane <2)
-            too_close_right = this->check_ahead(this->lane+1, predictions, *this);
+            too_close_right = this->check_others(this->lane+1, predictions, *this);
         
-        if (!too_close_left)
+        if (!too_close_left[0] && !too_close_left[1])
             this->lane --;
         else{
-            if(!too_close_right)
+            if (!too_close_right[0] && !too_close_right[1])
                 this->lane ++;
         }
         this->d = 4 * this->lane + 2;
-          
+        
         this->target_speed -= .224;
     }
     else if(this->target_speed < this->speed_limit){

@@ -32,7 +32,7 @@ class Vehicle {
     
     vector<float> get_kinematics(map<int, vector<Vehicle>> &predictions, int lane, double T=1);
     
-    bool check_ahead(int lane, map<int, vector<Vehicle>> &predictions, Vehicle &rVehicle);
+    vector<bool> check_others(int lane, map<int, vector<Vehicle>> &predictions, Vehicle &rVehicle);
         
     vector<Vehicle> keep_lane_trajectory(map<int, vector<Vehicle>> &predictions);
     

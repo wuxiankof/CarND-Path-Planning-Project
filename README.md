@@ -143,3 +143,68 @@ still be compilable with cmake and make./
 ## How to write a README
 A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
 
+## Reflection
+
+### 1. Introduction
+
+This Refection Section provides general descriptions of new classes/codes that I have created and the specific descriptions of the codes generating paths for the self-driving car.
+
+### 2. Description of New Classes/Files I Have Created
+
+1. **PathPlanner Class**
+
+   - The PathPlanner Class is aimed to set up an environment taking the reference of all map way points, receiving location data of the self-driving car and fusion data of all other vehicles, and coordinate with all Vehicle objects at each time step;
+   
+   - Variables defined for this Class includes:
+        - `Vehicle ego_Vehicle`: an object of the Vehicle class representing the self-driving car through out the entire simulation period.
+        - `std::map<int, Vehicle> vehicles`: a map storing objects of the Vehicle class for all other vehicles in the simulation environment.
+        - five vectors storing the map way points reference information.
+        
+   - Functions defined for this Class includes:
+        - `void update_ego_vehicle(x, y, s, d, yaw, speed, previous_path_x, previous_path_y, end_path_s, end_path_d)`: to update the variable ego_Vehicle with the latest location/kinematics.
+        - `void update_vehicles(sensor_fusion_data)`: to update all vehicle objects with the sensor fusion data stored in the map variable vehicles.
+        - `void get_ego_trajectory(&next_x_vals, &next_y_vals)`: to obtain the planned trajectory which contains coordinates of points in the next 50 time steps.
+
+2. **Vehicle Class**
+
+   - The Vehicle Class is defined for both the self-driving car (ego vehicle) and all other vehicles in the simulation environment. It includes attributes and functions that trace vehicle kinematics, predict future trajectories and path planning for the ego vehicle.
+   
+   - Variables defined for this Class includes:
+        - `double time_per_timestep`: time step of the simulation, which is set as 0.02 seconds per timestep as provided. 
+        - `double v, v_prev, a`: current speed, speed in previous time step and current acceleration.
+        - `double yaw`: current yaw value. If it's for the ego vehicle object, the unit is in degree/sec; otherwise, the unit is in rad/sec.
+        - `float target_speed`: speed the vehicle is targeting to.
+        - `float speed_limit`: the speed limit which is set to 49.5 MPH times 0.44704 (MPH converted to m/s: 1.6*1000/3600 or 1/2.24).
+        - `string state`: state of the vehicle which is currently only set as the default state "CS" (Constant Speed). Will be expanded to other states in future (not in this submission).
+         - other variables/pointers for the map way points reference information, as well as the previous path's information.
+        
+   - Functions defined for this Class includes:
+        - `void Update_Vehicle_Info(car_info)`: to update vehicle info at each time step.
+        - `float position_at(t)`: calculate position of the vehicle at time t.
+        - `vector<Vehicles> generate_predictions(timesteps)`: generate predictions of paths for other vehicles.
+        - `vector<bool> check_others(lane, &predictions, &rVehicle)`: check if there are adjacent vehicles (both front and back) in a perticular lane.
+        - `vector<Vehicle> generate_trajectory(&predictions)`: generate trajectory.
+        
+3. **Others**
+    
+    - in the Helpers.h/.cpp, I have defined a convenient function `int d2LaneNumber(d)` which is to convert value d to the lane number. 
+   
+### 3. Specific Description of Codes for Generating Paths for the Self-driving Car
+
+1. **At each time step (0.02 second)**:
+   
+   - the PathPlanner object will obtain all other vehicles' locations and pass it to the ego_Vehicle object.
+   
+   - then the ego_Vehicle object will make use of this information to carry out its path planning through the function `Vehicle::generate_trajectory(predictions)`.
+
+2. **In the ego_Vehicle object's function** `Vehicle::generate_trajectory(predictions)`, it will plan the trajectory through the following steps:
+   
+   - Select starting point(s) of the trajectory. If the previous path is almost empty, the starting points will be the current location of the car together with one more point at its back; however, if the size of the previous path is greater than 2, the starting points will be the last two points of the path.
+   
+   - Check if there are other vehicles in the vicinity. The function `Vehicle::check_others(lane, vehicle)` will be used to check if there are other vehicle(s) in the vicinity. if there is a vehicle in front within 30 meters, the ego vehicle will slow down its speed by 0.224 m/s at each time step; otherwise, it will just increase the speed by the same acceleration rate. 0.224 m/s up to a speed limit 49.5 mph.
+   
+   - Try to perform lane changing if allowed. The function `Vehicle::check_others(lane, vehicle)` will also assist to check if there is sufficient space in adjacent lanes to perform lane changing. If there is, the ego vehicle will prepare to perform lane changing.
+   
+   - Smooth the path using spline. In order to meet the Rubrics requirements that the car does not exceed a total acceleration of 10 m/s^2 and a jerk of 10 m/s^3, the path to be constructed need to be smoothed. The [spline Class](https://kluge.in-chemnitz.de/opensource/spline/) is adopted for this purpose. It includes the transformation of global coordinates to the vehicle's local coordinates to perform the spline interpolation, and then transform back again at the end.
+
+3. **At the end of each time step (0.02 second)**, the code model will return a path trajectory which includes 50 points for the ego vehicle to execute next.

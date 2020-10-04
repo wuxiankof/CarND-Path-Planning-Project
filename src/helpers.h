@@ -9,15 +9,8 @@
 using std::string;
 using std::vector;
 
-
-
-// ********** WX newly defined function: Start ********************
-
+// convert the value d to the lane number
 extern int d2LaneNumber(double d);
-
-extern vector<double> JMT(vector<double> &start, vector<double> &end, double T);
-
-// ********** WX newly defined function: End ********************
 
 
 // Checks if the SocketIO event has JSON data.
